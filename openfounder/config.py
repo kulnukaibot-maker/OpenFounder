@@ -22,6 +22,7 @@ class Config:
 
     # CEO Loop
     CEO_MAX_TOKENS: int = int(os.getenv("CEO_MAX_TOKENS", "4096"))
+    CREW_MAX_TOKENS: int = int(os.getenv("CREW_MAX_TOKENS", "8192"))
     CEO_TEMPERATURE: float = float(os.getenv("CEO_TEMPERATURE", "0.3"))
 
     # Discord

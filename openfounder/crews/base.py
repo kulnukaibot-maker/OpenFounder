@@ -18,6 +18,23 @@ CREW_MAX_RETRIES = 2
 CREW_RETRY_DELAY = 3
 
 
+def _extract_json(text: str) -> dict:
+    """Extract the first JSON object from text, ignoring trailing commentary."""
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Find the first { and use a decoder to grab just that object
+    start = text.find("{")
+    if start == -1:
+        raise json.JSONDecodeError("No JSON object found", text, 0)
+
+    decoder = json.JSONDecoder()
+    result, _ = decoder.raw_decode(text, start)
+    return result
+
+
 class BaseCrew:
     """Base class for all specialist crews."""
 
@@ -62,7 +79,7 @@ class BaseCrew:
 
                 response = client.messages.create(
                     model=config.CREW_MODEL,
-                    max_tokens=config.CEO_MAX_TOKENS,
+                    max_tokens=config.CREW_MAX_TOKENS,
                     temperature=config.CEO_TEMPERATURE,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_message}],
@@ -77,7 +94,8 @@ class BaseCrew:
                     raw = raw.rsplit("```", 1)[0]
                 raw = raw.strip()
 
-                result = json.loads(raw)
+                # Extract first JSON object — LLMs often append commentary
+                result = _extract_json(raw)
 
                 result["_crew"] = self.crew_name
                 result["_usage"] = {

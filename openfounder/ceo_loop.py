@@ -78,12 +78,13 @@ def _parse_llm_json(raw: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # Try extracting JSON object from surrounding text
+    # Extract first JSON object using decoder — handles trailing commentary
     start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
+    if start != -1:
         try:
-            return json.loads(text[start:end + 1])
+            decoder = json.JSONDecoder()
+            result, _ = decoder.raw_decode(text, start)
+            return result
         except json.JSONDecodeError:
             pass
 
