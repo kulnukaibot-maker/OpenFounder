@@ -1,3 +1,6 @@
+# OpenFounder — docker compose up and you're running
+# Docs: https://github.com/kulnukaibot-maker/openfounder
+
 services:
   db:
     image: postgres:16-alpine
@@ -17,20 +20,6 @@ services:
       timeout: 3s
       retries: 5
 
-  app:
-    build: .
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://openfounder:${POSTGRES_PASSWORD:-openfounder_dev}@db:5432/openfounder
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    volumes:
-      - ./openfounder:/app/openfounder
-      - ./scripts:/app/scripts
-
   dashboard:
     build: .
     restart: unless-stopped
@@ -41,11 +30,33 @@ services:
       - "${DASHBOARD_PORT:-8111}:8111"
     environment:
       DATABASE_URL: postgresql://openfounder:${POSTGRES_PASSWORD:-openfounder_dev}@db:5432/openfounder
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - ./openfounder:/app/openfounder
       - ./scripts:/app/scripts
-    command: ["python3", "scripts/openfounder_dashboard.py", "--host", "0.0.0.0", "--port", "8111"]
+    command: ["python3", "-m", "openfounder", "dashboard"]
+
+  ceo:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["ceo"]
+    environment:
+      DATABASE_URL: postgresql://openfounder:${POSTGRES_PASSWORD:-openfounder_dev}@db:5432/openfounder
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CEO_MODEL: ${CEO_MODEL:-claude-haiku-4-5-20251001}
+      CREW_MODEL: ${CREW_MODEL:-claude-haiku-4-5-20251001}
+      ESCALATION_MODEL: ${ESCALATION_MODEL:-claude-sonnet-4-20250514}
+      ENGINEERING_MODEL: ${ENGINEERING_MODEL:-claude-sonnet-4-20250514}
+      MARKETING_MODEL: ${MARKETING_MODEL:-claude-sonnet-4-20250514}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./openfounder:/app/openfounder
+      - ./scripts:/app/scripts
+    command: ["python3", "-m", "openfounder", "ceo"]
 
 volumes:
   pgdata:
