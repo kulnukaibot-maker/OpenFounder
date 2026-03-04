@@ -345,6 +345,54 @@ def list_pending_approvals(venture):
         return _rows_to_list(cur.fetchall())
 
 
+# ── Crew Outputs ─────────────────────────────────────────────────────────────
+
+def save_crew_output(venture, crew_name, task, context=None, status="completed",
+                     output=None, execution=None, branch_name=None, commit_sha=None,
+                     model=None, input_tokens=None, output_tokens=None, duration_s=None):
+    """Persist a crew output to the database."""
+    vid = _resolve_venture_id(venture)
+    with get_db() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """INSERT INTO crew_outputs (venture_id, crew_name, task, context, status,
+               output, execution, branch_name, commit_sha, model,
+               input_tokens, output_tokens, duration_s)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+            (vid, crew_name, task, context, status,
+             json.dumps(output or {}), json.dumps(execution) if execution else None,
+             branch_name, commit_sha, model,
+             input_tokens, output_tokens, duration_s),
+        )
+        return _row_to_dict(cur.fetchone())
+
+
+def list_crew_outputs(venture, crew_name=None, days=7):
+    """List recent crew outputs for a venture."""
+    vid = _resolve_venture_id(venture)
+    with get_db() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        query = """SELECT id, crew_name, task, status, branch_name, commit_sha,
+                   model, input_tokens, output_tokens, duration_s, created_at
+                   FROM crew_outputs WHERE venture_id = %s
+                   AND created_at > NOW() - INTERVAL '%s days'"""
+        params = [vid, days]
+        if crew_name:
+            query += " AND crew_name = %s"
+            params.append(crew_name)
+        query += " ORDER BY created_at DESC"
+        cur.execute(query, params)
+        return _rows_to_list(cur.fetchall())
+
+
+def get_crew_output(output_id):
+    """Get a single crew output by ID (includes full output JSON)."""
+    with get_db() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM crew_outputs WHERE id = %s", (output_id,))
+        return _row_to_dict(cur.fetchone())
+
+
 # ── Full State Snapshot ───────────────────────────────────────────────────────
 
 def get_state(venture):
@@ -364,6 +412,7 @@ def get_state(venture):
         "metrics": get_latest_metrics(venture),
         "campaigns": list_campaigns(venture),
         "pending_approvals": list_pending_approvals(venture),
+        "recent_crew_outputs": list_crew_outputs(venture, days=7),
     }
 
 

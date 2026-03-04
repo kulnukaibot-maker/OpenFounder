@@ -23,7 +23,7 @@ MIGRATIONS_DIR = Path(__file__).parent.parent / "openfounder" / "migrations"
 
 EXPECTED_TABLES = [
     "ventures", "features", "bugs", "decisions",
-    "metrics", "campaigns", "approvals",
+    "metrics", "campaigns", "approvals", "crew_outputs",
 ]
 
 

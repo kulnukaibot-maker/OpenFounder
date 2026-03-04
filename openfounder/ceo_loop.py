@@ -22,6 +22,7 @@ from openfounder.state import (
     update_feature,
     update_bug,
     list_decisions,
+    save_crew_output,
 )
 from openfounder.crews.base import run_crew
 from openfounder.approval import DiscordApprovalNotifier, send_briefing_to_discord
@@ -279,7 +280,7 @@ def _process_metrics(venture_name: str, ceo_output: dict) -> list:
 
 
 def _process_delegations(venture_name: str, ceo_output: dict) -> list:
-    """Execute crew delegations from the CEO output."""
+    """Execute crew delegations and persist results to crew_outputs table."""
     results = []
     for d in ceo_output.get("delegations", []):
         crew_name = d.get("crew")
@@ -290,19 +291,59 @@ def _process_delegations(venture_name: str, ceo_output: dict) -> list:
             logger.warning("Skipping malformed delegation: missing crew or task")
             continue
 
+        start_time = time.time()
         try:
             result = run_crew(crew_name, venture_name, task, context)
+            duration = time.time() - start_time
+            usage = result.get("_usage", {})
+            execution = result.get("_execution")
+
+            # Persist crew output to DB
+            try:
+                save_crew_output(
+                    venture=venture_name,
+                    crew_name=crew_name,
+                    task=task,
+                    context=context,
+                    status=execution.get("status", "completed") if execution else "completed",
+                    output=result,
+                    execution=execution,
+                    branch_name=execution.get("branch") if execution else None,
+                    commit_sha=execution.get("commit_sha") if execution else None,
+                    model=usage.get("model"),
+                    input_tokens=usage.get("input_tokens"),
+                    output_tokens=usage.get("output_tokens"),
+                    duration_s=round(duration, 1),
+                )
+            except Exception as e:
+                logger.error("Failed to persist crew output: %s", e)
+
             results.append({"crew": crew_name, "task": task, "status": "success", "output": result})
             logger.info("Delegation complete: %s → %s", crew_name, task[:60])
         except Exception as e:
+            duration = time.time() - start_time
             logger.error("Delegation failed: %s → %s: %s", crew_name, task[:60], e)
+
+            try:
+                save_crew_output(
+                    venture=venture_name,
+                    crew_name=crew_name,
+                    task=task,
+                    context=context,
+                    status="failed",
+                    output={"error": str(e)},
+                    duration_s=round(duration, 1),
+                )
+            except Exception:
+                pass
+
             results.append({"crew": crew_name, "task": task, "status": "error", "error": str(e)})
 
     return results
 
 
-def _build_briefing(ceo_output: dict) -> str:
-    """Extract or build the morning briefing."""
+def _build_briefing(ceo_output: dict, delegation_results: list = None) -> str:
+    """Extract or build the morning briefing, including engineering results."""
     briefing = ceo_output.get("morning_briefing", "")
     if not briefing:
         # Fallback: build from summary + priorities
@@ -312,6 +353,17 @@ def _build_briefing(ceo_output: dict) -> str:
         for p in ceo_output.get("priorities", [])[:5]:
             parts.append(f"- [{p.get('urgency', '?')}] {p['title']} → {p.get('assigned_crew', '?')}")
         briefing = "\n".join(parts) if parts else "No briefing generated."
+
+    # Append engineering execution results
+    if delegation_results:
+        eng_results = [r for r in delegation_results
+                       if r.get("crew") == "engineering" and r.get("status") == "success"]
+        for r in eng_results:
+            execution = r.get("output", {}).get("_execution", {})
+            if execution.get("branch"):
+                status_note = "tests passing" if execution.get("status") == "success" else "needs review"
+                briefing += f"\n- **Engineering:** Code on branch `{execution['branch']}` ({status_note})"
+
     return briefing
 
 
@@ -373,7 +425,7 @@ def run_ceo_loop(venture_name: str, dry_run: bool = False) -> dict:
         delegation_results = _process_delegations(venture_name, ceo_output)
 
     # 6. Build briefing and notify
-    briefing = _build_briefing(ceo_output)
+    briefing = _build_briefing(ceo_output, delegation_results)
 
     if not dry_run:
         # Send approval notifications to Discord (non-fatal)

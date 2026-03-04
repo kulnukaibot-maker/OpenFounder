@@ -53,6 +53,14 @@ class BaseCrew:
         template = template.replace("{{venture_name}}", self.venture["name"])
         return template
 
+    def _get_model(self) -> str:
+        """Return the model to use. Override in subclasses for per-crew models."""
+        return config.CREW_MODEL
+
+    def _get_max_tokens(self) -> int:
+        """Return max tokens. Override in subclasses for per-crew limits."""
+        return config.CREW_MAX_TOKENS
+
     def run(self, task: str, context: str = "") -> dict:
         """Run the crew on a specific task with retry on transient failures.
 
@@ -77,9 +85,10 @@ class BaseCrew:
                 logger.info("[%s] Running task (attempt %d/%d): %s",
                             self.crew_name, attempt + 1, CREW_MAX_RETRIES + 1, task[:80])
 
+                model = self._get_model()
                 response = client.messages.create(
-                    model=config.CREW_MODEL,
-                    max_tokens=config.CREW_MAX_TOKENS,
+                    model=model,
+                    max_tokens=self._get_max_tokens(),
                     temperature=config.CEO_TEMPERATURE,
                     system=system_prompt,
                     messages=[{"role": "user", "content": user_message}],
@@ -101,7 +110,7 @@ class BaseCrew:
                 result["_usage"] = {
                     "input_tokens": response.usage.input_tokens,
                     "output_tokens": response.usage.output_tokens,
-                    "model": config.CREW_MODEL,
+                    "model": model,
                 }
 
                 logger.info(
