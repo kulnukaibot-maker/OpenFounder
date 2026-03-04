@@ -32,6 +32,11 @@ class Config:
     ENGINEERING_REPO_PATH: str = os.getenv("ENGINEERING_REPO_PATH", "")
     ENGINEERING_TEST_TIMEOUT: int = int(os.getenv("ENGINEERING_TEST_TIMEOUT", "120"))
 
+    # Marketing crew
+    MARKETING_MODEL: str = os.getenv("MARKETING_MODEL", "claude-sonnet-4-20250514")
+    MARKETING_MAX_TOKENS: int = int(os.getenv("MARKETING_MAX_TOKENS", "8192"))
+    MARKETING_AUTO_PUBLISH: bool = os.getenv("MARKETING_AUTO_PUBLISH", "false").lower() in ("true", "1", "yes")
+
     # Discord
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
 

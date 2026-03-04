@@ -354,15 +354,25 @@ def _build_briefing(ceo_output: dict, delegation_results: list = None) -> str:
             parts.append(f"- [{p.get('urgency', '?')}] {p['title']} → {p.get('assigned_crew', '?')}")
         briefing = "\n".join(parts) if parts else "No briefing generated."
 
-    # Append engineering execution results
+    # Append crew execution results
     if delegation_results:
-        eng_results = [r for r in delegation_results
-                       if r.get("crew") == "engineering" and r.get("status") == "success"]
-        for r in eng_results:
-            execution = r.get("output", {}).get("_execution", {})
-            if execution.get("branch"):
-                status_note = "tests passing" if execution.get("status") == "success" else "needs review"
-                briefing += f"\n- **Engineering:** Code on branch `{execution['branch']}` ({status_note})"
+        for r in delegation_results:
+            if r.get("status") != "success":
+                continue
+            output = r.get("output", {})
+
+            # Engineering: branch info
+            if r.get("crew") == "engineering":
+                execution = output.get("_execution", {})
+                if execution.get("branch"):
+                    status_note = "tests passing" if execution.get("status") == "success" else "needs review"
+                    briefing += f"\n- **Engineering:** Code on branch `{execution['branch']}` ({status_note})"
+
+            # Marketing: content pieces saved
+            if r.get("crew") == "marketing":
+                saved = output.get("_content_saved", 0)
+                if saved:
+                    briefing += f"\n- **Marketing:** {saved} content piece(s) saved to calendar (pending approval)"
 
     return briefing
 

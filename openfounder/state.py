@@ -345,6 +345,73 @@ def list_pending_approvals(venture):
         return _rows_to_list(cur.fetchall())
 
 
+# ── Content Calendar ─────────────────────────────────────────────────────────
+
+def add_content(venture, channel, title, body, cta=None, status="draft",
+                scheduled_for=None, campaign_id=None, crew_output_id=None, metadata=None):
+    """Add a content piece to the calendar."""
+    vid = _resolve_venture_id(venture)
+    with get_db() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """INSERT INTO content_calendar (venture_id, channel, title, body, cta,
+               status, scheduled_for, campaign_id, crew_output_id, metadata)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+            (vid, channel, title, body, cta, status, scheduled_for,
+             campaign_id, crew_output_id, json.dumps(metadata or {})),
+        )
+        return _row_to_dict(cur.fetchone())
+
+
+def list_content(venture, status=None, channel=None, days=30):
+    """List content calendar entries for a venture."""
+    vid = _resolve_venture_id(venture)
+    with get_db() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        query = """SELECT * FROM content_calendar WHERE venture_id = %s
+                   AND created_at > NOW() - INTERVAL '%s days'"""
+        params = [vid, days]
+        if status:
+            query += " AND status = %s"
+            params.append(status)
+        if channel:
+            query += " AND channel = %s"
+            params.append(channel)
+        query += " ORDER BY COALESCE(scheduled_for, created_at)"
+        cur.execute(query, params)
+        return _rows_to_list(cur.fetchall())
+
+
+def update_content(content_id, **kwargs):
+    """Update a content calendar entry."""
+    allowed = {"title", "body", "cta", "status", "channel",
+               "scheduled_for", "published_at", "published_url"}
+    updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
+    if not updates:
+        return None
+    with get_db() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        set_clause = ", ".join(f"{k} = %s" for k in updates)
+        values = list(updates.values()) + [content_id]
+        cur.execute(f"UPDATE content_calendar SET {set_clause} WHERE id = %s RETURNING *", values)
+        return _row_to_dict(cur.fetchone())
+
+
+def get_pending_content(venture):
+    """Get content pieces ready to publish (status=approved, scheduled_for <= now)."""
+    vid = _resolve_venture_id(venture)
+    with get_db() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """SELECT * FROM content_calendar WHERE venture_id = %s
+               AND status = 'approved'
+               AND (scheduled_for IS NULL OR scheduled_for <= NOW())
+               ORDER BY scheduled_for NULLS LAST""",
+            (vid,),
+        )
+        return _rows_to_list(cur.fetchall())
+
+
 # ── Crew Outputs ─────────────────────────────────────────────────────────────
 
 def save_crew_output(venture, crew_name, task, context=None, status="completed",
@@ -412,6 +479,7 @@ def get_state(venture):
         "metrics": get_latest_metrics(venture),
         "campaigns": list_campaigns(venture),
         "pending_approvals": list_pending_approvals(venture),
+        "content_calendar": list_content(venture, days=14),
         "recent_crew_outputs": list_crew_outputs(venture, days=7),
     }
 
