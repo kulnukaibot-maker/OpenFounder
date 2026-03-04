@@ -123,11 +123,11 @@ The first open-source AI co-founder system. A nightly CEO Loop reads your ventur
 
 ## Phase 2 (Month 2)
 - Infrastructure provisioner (GitHub, Neon, Railway auto-setup)
-- Multi-venture support
-- Engineering crew (deep Claude Code integration)
-- Full marketing crew (content calendar, social, cold outreach)
-- Finance crew (revenue tracking, budget enforcement)
-- Mission Control dashboard (FastAPI + HTML)
+- [x] Multi-venture support (`scripts/openfounder_ceo_all.py` — iterates all active ventures)
+- [x] Engineering crew (deep Claude Code integration) — completed in Phase 1
+- [x] Full marketing crew (content calendar, social, cold outreach) — completed in Phase 1
+- [x] Finance crew (`crews/finance.py` + `prompts/finance_crew.md` + `migrations/002_finance_tables.sql`)
+- [x] Mission Control dashboard (`dashboard/app.py` — FastAPI + embedded HTML, port 8111)
 
 ## Phase 3 (Month 3+)
 - GitHub public repo: `openclaw/openfounder`
@@ -152,25 +152,30 @@ openfounder/
 │   ├── config.py              # env-based config loader
 │   ├── state.py               # Postgres-backed company state
 │   ├── ceo_loop.py            # Nightly CEO loop orchestrator
+│   ├── executor.py            # Code executor (branch, apply, test, commit)
 │   ├── approval.py            # Human-in-the-loop approval system
 │   ├── crews/
 │   │   ├── base.py
 │   │   ├── engineering.py
+│   │   ├── finance.py         # Phase 2: revenue tracking, budget enforcement
 │   │   ├── marketing.py
 │   │   └── research.py
-│   ├── integrations/
-│   │   ├── discord.py
-│   │   ├── github.py
-│   │   └── notion.py
+│   ├── dashboard/
+│   │   ├── app.py             # Phase 2: FastAPI + embedded HTML dashboard
+│   │   └── static/            # Optional static file overrides
 │   ├── prompts/
 │   │   ├── ceo_system.md
 │   │   ├── research_crew.md
 │   │   ├── engineering_crew.md
-│   │   └── marketing_crew.md
+│   │   ├── marketing_crew.md
+│   │   └── finance_crew.md    # Phase 2
 │   └── migrations/
-│       └── 001_initial_schema.sql
+│       ├── 001_initial_schema.sql
+│       └── 002_finance_tables.sql  # Phase 2: budgets, expenses, revenue
 ├── scripts/
-│   ├── openfounder_ceo.py     # CLI entry for CEO Loop
+│   ├── openfounder_ceo.py     # CLI entry for CEO Loop (single venture)
+│   ├── openfounder_ceo_all.py # Phase 2: multi-venture CEO loop
+│   ├── openfounder_dashboard.py # Phase 2: launch Mission Control
 │   ├── openfounder_setup.py   # One-time DB setup
 │   └── openfounder_venture.py # Venture management CLI
 ├── tests/
@@ -204,4 +209,4 @@ openfounder/
 
 ## Open Questions
 - [ ] GitHub repo setup (pending Sir Abhi's login credentials)
-- [ ] VPS port for Mission Control dashboard (Phase 2)
+- [x] VPS port for Mission Control dashboard → **8111** (configurable via `DASHBOARD_PORT`)

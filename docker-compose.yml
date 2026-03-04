@@ -31,5 +31,21 @@ services:
       - ./openfounder:/app/openfounder
       - ./scripts:/app/scripts
 
+  dashboard:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${DASHBOARD_PORT:-8111}:8111"
+    environment:
+      DATABASE_URL: postgresql://openfounder:${POSTGRES_PASSWORD:-openfounder_dev}@db:5432/openfounder
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./openfounder:/app/openfounder
+      - ./scripts:/app/scripts
+    command: ["python3", "scripts/openfounder_dashboard.py", "--host", "0.0.0.0", "--port", "8111"]
+
 volumes:
   pgdata:

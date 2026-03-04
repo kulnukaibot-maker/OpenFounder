@@ -37,6 +37,14 @@ class Config:
     MARKETING_MAX_TOKENS: int = int(os.getenv("MARKETING_MAX_TOKENS", "8192"))
     MARKETING_AUTO_PUBLISH: bool = os.getenv("MARKETING_AUTO_PUBLISH", "false").lower() in ("true", "1", "yes")
 
+    # Finance crew
+    FINANCE_MODEL: str = os.getenv("FINANCE_MODEL", "claude-haiku-4-5-20251001")
+    FINANCE_MAX_TOKENS: int = int(os.getenv("FINANCE_MAX_TOKENS", "4096"))
+
+    # Dashboard
+    DASHBOARD_HOST: str = os.getenv("DASHBOARD_HOST", "0.0.0.0")
+    DASHBOARD_PORT: int = int(os.getenv("DASHBOARD_PORT", "8111"))
+
     # Discord
     DISCORD_WEBHOOK_URL: str = os.getenv("DISCORD_WEBHOOK_URL", "")
 
