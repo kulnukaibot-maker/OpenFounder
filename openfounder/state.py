@@ -374,6 +374,56 @@ def _output(data):
     print(json.dumps(data, indent=2, default=str))
 
 
+def _confidence_bar(confidence: float) -> str:
+    """Render a confidence score as a visual bar."""
+    filled = int(confidence * 10)
+    return "█" * filled + "░" * (10 - filled) + f" {confidence:.0%}"
+
+
+def _pretty_decisions(venture: str, decisions: list, days: int):
+    """Print decisions in a human-readable formatted view."""
+    print(f"\n{'═' * 70}")
+    print(f"  Decision Log — {venture} (last {days} days)")
+    print(f"  {len(decisions)} decision(s)")
+    print(f"{'═' * 70}")
+
+    if not decisions:
+        print("  No decisions found.\n")
+        return
+
+    for d in decisions:
+        dtype = d.get("decision_type", "?").upper()
+        conf = d.get("confidence", 0.5)
+        source = d.get("source", "?")
+        created = d.get("created_at", "?")
+        if isinstance(created, str) and len(created) > 16:
+            created = created[:16]
+
+        print(f"\n  [{dtype}] {d.get('title', '?')}")
+        print(f"  {'─' * 66}")
+        print(f"  Reasoning:  {d.get('reasoning', 'N/A')}")
+        if d.get("outcome"):
+            print(f"  Outcome:    {d['outcome']}")
+        print(f"  Confidence: {_confidence_bar(conf)}")
+        print(f"  Source:     {source}  |  Date: {created}")
+
+    # Summary stats
+    types = {}
+    total_conf = 0
+    for d in decisions:
+        t = d.get("decision_type", "?")
+        types[t] = types.get(t, 0) + 1
+        total_conf += d.get("confidence", 0.5)
+
+    avg_conf = total_conf / len(decisions) if decisions else 0
+    type_summary = ", ".join(f"{v} {k}" for k, v in sorted(types.items(), key=lambda x: -x[1]))
+
+    print(f"\n{'─' * 70}")
+    print(f"  Types:          {type_summary}")
+    print(f"  Avg confidence: {_confidence_bar(avg_conf)}")
+    print(f"{'═' * 70}\n")
+
+
 def cli():
     parser = argparse.ArgumentParser(
         prog="openfounder-state",
@@ -442,6 +492,8 @@ def cli():
     p.add_argument("venture")
     p.add_argument("--days", type=int, default=7)
     p.add_argument("--type", dest="decision_type")
+    p.add_argument("--source")
+    p.add_argument("--pretty", action="store_true", help="Formatted table output")
 
     # add-metric
     p = sub.add_parser("add-metric", help="Record a metric")
@@ -515,7 +567,13 @@ def cli():
                                  args.outcome, args.confidence, args.source))
 
         elif args.command == "decisions":
-            _output(list_decisions(args.venture, args.days, args.decision_type))
+            decisions = list_decisions(args.venture, args.days, args.decision_type)
+            if args.source:
+                decisions = [d for d in decisions if d.get("source") == args.source]
+            if args.pretty:
+                _pretty_decisions(args.venture, decisions, args.days)
+            else:
+                _output(decisions)
 
         elif args.command == "add-metric":
             _output(add_metric(args.venture, args.name, args.value, args.unit, args.source))
