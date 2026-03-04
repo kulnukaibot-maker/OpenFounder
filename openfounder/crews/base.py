@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from pathlib import Path
 
 import anthropic
@@ -12,6 +13,9 @@ from openfounder.state import get_venture
 logger = logging.getLogger("openfounder.crew")
 
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+
+CREW_MAX_RETRIES = 2
+CREW_RETRY_DELAY = 3
 
 
 class BaseCrew:
@@ -33,7 +37,7 @@ class BaseCrew:
         return template
 
     def run(self, task: str, context: str = "") -> dict:
-        """Run the crew on a specific task.
+        """Run the crew on a specific task with retry on transient failures.
 
         Args:
             task: The task description from the CEO.
@@ -50,44 +54,67 @@ class BaseCrew:
 
         client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
 
-        logger.info("[%s] Running task: %s", self.crew_name, task[:80])
+        last_error = None
+        for attempt in range(CREW_MAX_RETRIES + 1):
+            try:
+                logger.info("[%s] Running task (attempt %d/%d): %s",
+                            self.crew_name, attempt + 1, CREW_MAX_RETRIES + 1, task[:80])
 
-        response = client.messages.create(
-            model=config.CREW_MODEL,
-            max_tokens=config.CEO_MAX_TOKENS,
-            temperature=config.CEO_TEMPERATURE,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+                response = client.messages.create(
+                    model=config.CREW_MODEL,
+                    max_tokens=config.CEO_MAX_TOKENS,
+                    temperature=config.CEO_TEMPERATURE,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": user_message}],
+                )
+
+                raw = response.content[0].text.strip()
+
+                # Strip markdown fences if present
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[1]
+                if raw.endswith("```"):
+                    raw = raw.rsplit("```", 1)[0]
+                raw = raw.strip()
+
+                result = json.loads(raw)
+
+                result["_crew"] = self.crew_name
+                result["_usage"] = {
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                    "model": config.CREW_MODEL,
+                }
+
+                logger.info(
+                    "[%s] Complete: %d in / %d out tokens",
+                    self.crew_name, response.usage.input_tokens, response.usage.output_tokens,
+                )
+
+                return result
+
+            except (anthropic.APIConnectionError, anthropic.RateLimitError,
+                    anthropic.InternalServerError) as e:
+                last_error = e
+                if attempt < CREW_MAX_RETRIES:
+                    delay = CREW_RETRY_DELAY * (2 ** attempt)
+                    logger.warning("[%s] LLM call failed (attempt %d/%d): %s — retrying in %ds",
+                                   self.crew_name, attempt + 1, CREW_MAX_RETRIES + 1, e, delay)
+                    time.sleep(delay)
+
+            except json.JSONDecodeError as e:
+                last_error = e
+                if attempt < CREW_MAX_RETRIES:
+                    logger.warning("[%s] Invalid JSON (attempt %d/%d): %s — retrying",
+                                   self.crew_name, attempt + 1, CREW_MAX_RETRIES + 1, e)
+                    time.sleep(CREW_RETRY_DELAY)
+
+            except anthropic.AuthenticationError:
+                raise
+
+        raise RuntimeError(
+            f"[{self.crew_name}] Failed after {CREW_MAX_RETRIES + 1} attempts: {last_error}"
         )
-
-        raw = response.content[0].text.strip()
-
-        # Strip markdown fences if present
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1]
-        if raw.endswith("```"):
-            raw = raw.rsplit("```", 1)[0]
-        raw = raw.strip()
-
-        try:
-            result = json.loads(raw)
-        except json.JSONDecodeError as e:
-            logger.error("[%s] Failed to parse output: %s", self.crew_name, e)
-            raise ValueError(f"{self.crew_name} output is not valid JSON: {e}") from e
-
-        result["_crew"] = self.crew_name
-        result["_usage"] = {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-            "model": config.CREW_MODEL,
-        }
-
-        logger.info(
-            "[%s] Complete: %d in / %d out tokens",
-            self.crew_name, response.usage.input_tokens, response.usage.output_tokens,
-        )
-
-        return result
 
 
 def run_crew(crew_name: str, venture_name: str, task: str, context: str = "") -> dict:

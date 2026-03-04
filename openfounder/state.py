@@ -6,19 +6,41 @@ import sys
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+import logging
+import time
+
 import psycopg2
 import psycopg2.extras
 
 from openfounder.config import config
 
+logger = logging.getLogger("openfounder.state")
+
 # Use RealDictCursor for JSON-friendly output
 psycopg2.extras.register_default_jsonb(globally=True, loads=json.loads)
+
+DB_MAX_RETRIES = 2
+DB_RETRY_DELAY = 1  # seconds
 
 
 @contextmanager
 def get_db():
-    """Get a database connection with auto-commit on success."""
-    conn = psycopg2.connect(config.DATABASE_URL)
+    """Get a database connection with auto-commit on success and retry on transient failures."""
+    last_error = None
+    for attempt in range(DB_MAX_RETRIES + 1):
+        try:
+            conn = psycopg2.connect(config.DATABASE_URL, connect_timeout=10)
+            break
+        except psycopg2.OperationalError as e:
+            last_error = e
+            if attempt < DB_MAX_RETRIES:
+                delay = DB_RETRY_DELAY * (2 ** attempt)
+                logger.warning("DB connection failed (attempt %d/%d): %s — retrying in %ds",
+                               attempt + 1, DB_MAX_RETRIES + 1, e, delay)
+                time.sleep(delay)
+            else:
+                logger.error("DB connection failed after %d attempts: %s", DB_MAX_RETRIES + 1, e)
+                raise ConnectionError(f"Cannot connect to database after {DB_MAX_RETRIES + 1} attempts: {e}") from e
     try:
         yield conn
         conn.commit()

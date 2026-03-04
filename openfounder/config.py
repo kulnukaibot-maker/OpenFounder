@@ -15,8 +15,10 @@ class Config:
 
     # LLM
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
-    CEO_MODEL: str = os.getenv("CEO_MODEL", "claude-sonnet-4-6-20250514")
-    CREW_MODEL: str = os.getenv("CREW_MODEL", "claude-sonnet-4-6-20250514")
+    CEO_MODEL: str = os.getenv("CEO_MODEL", "claude-haiku-4-5-20251001")
+    CREW_MODEL: str = os.getenv("CREW_MODEL", "claude-haiku-4-5-20251001")
+    ESCALATION_MODEL: str = os.getenv("ESCALATION_MODEL", "claude-sonnet-4-6-20250514")
+    MAX_MODEL: str = os.getenv("MAX_MODEL", "claude-opus-4-6-20250514")
 
     # CEO Loop
     CEO_MAX_TOKENS: int = int(os.getenv("CEO_MAX_TOKENS", "4096"))
